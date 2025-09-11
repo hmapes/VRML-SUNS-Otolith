@@ -102,7 +102,7 @@ dev.off()
 ```{r}
 
 fish_data <- shape_obj@master.list
-write.csv(fish_data, )
+
 
 # Get length, width, area, perimeter of otolith
 measurements <- getMeasurements(shape_obj)
@@ -508,7 +508,7 @@ cleanfish<-na.omit(FISH)
 #cleanfish = rep(unlist(cleanfish), nrow(wavelet_data))
 #df<-data.frame(wavelet_data, cleanfish=unlist(cleanfish))
 # the RDA model
-myrda <- rda(wavelet_data ~ PacFIN_Species_Code, data = FISH)
+myrda <-rda(wavelet_data ~ PacFIN_Species_Code, data = FISH)
 # Summarize the RDA result
 summary(myrda)
 # Plot the RDA result
@@ -628,6 +628,24 @@ model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code *
 summary(model_with_interaction_perimeter)
 
 #In Summary: otolith area, otolith width and otolith length were not significant with Fork Length as a covariate. Otolith perimeter was found to be significant though with Fork Length as a covariate
+
+model_sulcus<- lm(ImageJ_sulcus_mm ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_sulcus)
+
+model_sulcus<- lm(ImageJ_sulcus_mm ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_sulcus)
+
+#ANCOVA for otlith sulcus groove measurement does NOT need standardization
+
+model_thick<- lm(Caliper_conversion_mm ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_thick)
+
+model_thickness<- lm(Caliper_conversion_mm ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_thickness)
+
+#ANCOVA does indicate a significant interaction between otolith thickness and otolith weight but not for fork length
+
+#proceed with standardization between otolith thickness and otolith weight
 ```
 
 ```{r}
@@ -648,25 +666,11 @@ summary(model_without_interaction_width)
 # Fit a model with an interaction term to test for equal slopes
 model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code * Age_years, data = fish_data)
 summary(model_with_interaction_perimeter)
+
+#ANCOVA notes a significant interaction between age and otolith area, length, perimeter and width
+
+#proceed with standardization?
                       
-# Run t-test (normal distributed data)
-library(rstatix)
-
-# Compute t-test
-area <- t.test(otolith.area ~ PacFIN_Species_Code, data=fish_data)
-area
-
-# Compute t-test
-length <- t.test(otolith.length ~ PacFIN_Species_Code, data=fish_data)
-length
-
-# Compute t-test
-perimeter <- t.test(otolith.perimeter ~ PacFIN_Species_Code, data=fish_data)
-perimeter
-
-# Compute t-test
-width <- t.test(otolith.width ~ PacFIN_Species_Code, data=fish_data)
-width
 ```
 
 ```{r}
@@ -825,12 +829,11 @@ ggplot(meta_data, aes(x = otolith_width)) +
 
 #Wavelet analysis
 library(readr)
-library(data.table)
 library(here)
 #Set project path to the folder 'ShapeAnalysis'
 shape_obj_fish <- shapeR(
   project.path = here("ShapeAnalysis"), 
-  info.file = "fish_data_measurements.csv"
+  info.file = "FISH.csv"
 )
 
 # Trace orange outline around otolith - saves in Original_with_outline
@@ -849,14 +852,14 @@ shape_obj_fish = enrich.master.list(shape_obj_fish)
 save(shape_obj_fish, file = "VRML-SUNS-Species.Rdata")
 
 #shape analysis
-shape = stdCoefs(shape_obj_fish, classes = "PacFIN_Species_Code", "ForkLength_cm", 
-                 bonferroni = FALSE)
+shape = stdCoefs(shape_obj_fish, classes = "Species", "ForkLength_cm", 
+                 bonferroni = TRUE)
 
 est.list = estimate.outline.reconstruction(shape_obj_fish)
 
 outline.reconstruction.plot(est.list, max.num.harmonics = 15)
 
-plotWavelet(shape, level = 5, class.name = "PacFIN_Species_Code", 
+plotWavelet(shape, level = 5, class.name = "Species", 
             useStdcoef = TRUE)
 
 
@@ -872,5 +875,9 @@ plotWavelet(shape, level = 5, class.name = "PacFIN_Species_Code",
 ```
 
 ```{r}
+#otolith weight - age relationship
+library(ggplot2)
 
+p<-ggplot(fish_data, aes(Age_years,Wgt_g, color = PacFIN_Species_Code))
+p
 ```
