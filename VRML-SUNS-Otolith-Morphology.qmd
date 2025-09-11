@@ -1,0 +1,876 @@
+---
+title: "Vermilion-Sunset-Otolith-Morphology-Comparison"
+author: "Rachel Brooks"
+format: html
+editor: visual
+---
+
+## Load ShapeR
+
+This chunk load shapeR and retrieve data, as well as sets project path folder.
+
+```{r, warning=FALSE}
+
+# load shape R and retrieve data
+library(here)
+library(shapeR)
+
+#Set project path to the folder 'ShapeAnalysis'
+shape_obj <- shapeR(
+  project.path = here("ShapeAnalysis"), 
+  info.file = "FISH.csv"
+)
+
+```
+
+## Creating a ShapeR object outline from image files
+
+**detect.outline():** Obtain the outline of each otolith. The outlines are detected by first transforming the images into gray-scale. The images are then binarized using a threshold pixel value (intensity threshold) which can be defined by the user. The outlines are then collected automatically from all images in the folder 'Fixed'. Modification of the outlines are stored in different slots within the shape data object.
+
+-   **threshold** argument is used to distinguish the white otolith from black background (essentially increases contrast)
+
+-   **write.outline.w.org** argument determines whether the detected outline should be written on top of the original image (TRUE) or not (FALSE) in the folder 'Original_with_outline' which shapeR makes automatically and places into the folder 'ShapeAnalysis'. *It is recommended to run the images with the write.outline.w.org = TRUE the first time the images are run for quality checking, to see if the outline fits the original image from the microscope.*
+
+    -   If an error occurs, or the outline is of low quality, the outline can be removed from the shapeR instance:
+
+        > *shape = remove.outline(shape,"IC","403_54")*
+
+    -   To view an individual otolith with outline:
+
+        > *show.original.with.outline(shape,"IC","403_54")*
+
+-   **smoothout** argument calculates a weighted moving average over three succesive coordinate points to smooth multiple outlines. The number of iterations (ex: n = 100) provided by the user is the maximum number of iterations of smoothing. This argument is used to reduce high frequency pixel noise around the outlines which can corrupt Fourier or Wavelength analysis.
+
+-   **generateShapeCoefficients** argument extracts the shape coefficient from the captured outlines
+
+-   **enrich.master.list** argument connects data file containing information on origin and size of the fish to the outlines
+
+```{r}
+
+# Trace orange outline around otolith - saves in Original_with_outline
+shape_obj = detect.outline(shape_obj, threshold = 0.20, write.outline.w.org = FALSE)
+
+# Smooth outlines 
+shape_obj = smoothout(shape_obj, n = 100)
+
+# Extract shape coefficient
+shape_obj = generateShapeCoefficients(shape_obj)
+
+# Connect data file 'FISH.csv' to the outlines
+shape_obj = enrich.master.list(shape_obj)
+
+# Save shape object
+save(shape_obj, file = "VRML-SUNS.Rdata")
+
+```
+
+## Mean otolith shape
+
+-   plotWaveletShape argument plots the mean otolith shape using the Wavelet coefficients
+
+-   plotFourierShape argument plots the mean otolith shape using the Wavelet coefficients
+
+    -   Can adjust parameter to an alternate variable depending on what you're looking to compare (i.e., "sex", "species", etc.) - here we're comparing species using the "PacFIN_Species_Code"
+
+```{r}
+# Plot mean otolith shape using Wavelet coefficient 
+png("wavelet_shape_plot.png", width = 2500, height = 1500, res = 300)
+plotWaveletShape(shape_obj, "PacFIN_Species_Code", show.angle = TRUE, lwd = 2,lty = 1)
+dev.off()
+
+# Plot mean otolith shape using Fourier coefficient
+png("Fourier_shape_plot.png", width = 2500, height = 1500, res = 300)
+plotFourierShape(shape_obj, "PacFIN_Species_Code", show.angle = TRUE, lwd = 2,lty = 1)
+dev.off()
+
+```
+
+## Morphometric measurements
+
+-   First, you will nedd to extract the `master.list` data frame from the `shape` object and assign it to a new variable. I called it `fish_data`. Now you can work with `fish_data` as a regular data frame in your analyses or plotting.
+
+-   **getMeasurements** argument allows you to collect all otolith measurements (otolith length, width, perimeter, and area) from unstandardized otoliths
+
+    -   Feret length and width are concepts used in image analysis to describe the maximum distance between two parallel lines tangent to an object - measuring the longest distance across an object, regardless of orientation.
+
+    -   For each species, the mean for the variables in the summary statistics (area, length, perimeter, width) can be calculated:
+
+        > *tapply(getMeasurements(shape)\$otolith.area, getMasterlist(shape)\$PacFIN_Species_Code, mean)*
+
+-   **getStdMeasurements** argument allows you to collect all otolith measurements (otolith length, width, perimeter, and area) from standardized otoliths
+
+```{r}
+
+fish_data <- shape_obj@master.list
+write.csv(fish_data, )
+
+# Get length, width, area, perimeter of otolith
+measurements <- getMeasurements(shape_obj)
+
+# Calculate mean of the otolith morphometric variable: 
+# Otolith area
+tapply(getMeasurements(shape_obj)$otolith.area, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+# Otolith perimeter
+tapply(getMeasurements(shape_obj)$otolith.perimeter, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+# Otolith length
+tapply(getMeasurements(shape_obj)$otolith.length, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+# Otolith width
+tapply(getMeasurements(shape_obj)$otolith.width, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+
+```
+
+## Adjusting coefficients for fish length and wavelet/fourier reconstruct
+
+-   **stdCoefs** argument evaluates each Wavelet and Fourier coefficient and adjusts the otolith shape with respect to allometric relationships with the fish lengths.
+
+    -   Those coefficients which show interaction (P\<0.05), between population and length, are omitted automatically.
+
+    -   In order to account for increased alpha error due to multiple testing of the different coefficients it is possible to conduct the Bonferroni adjustment
+
+-   **estimate.outline.reconstruction** argument estimates the quality of the Wavelet and Fourier reconstruction by comparing how it deviates from otolith outline
+
+    -   The quality increases with the increase of Wavelet/Fourier coefficients used
+
+-   **plotWavelet** argument can be used to inspect how the variation in the Wavelet coefficients is dependent on the position along the outline. The proportion of variation among groups, the interclass correlation (ICC), gives further information about the partition of the variation along the outline
+
+    ```{r}
+    shape = stdCoefs(shape_obj, classes = "PacFIN_Species_Code", "Wgt_g", 
+                     bonferroni = TRUE)
+
+    est.list = estimate.outline.reconstruction(shape_obj)
+
+    outline.reconstruction.plot(est.list, max.num.harmonics = 15)
+
+    plotWavelet(shape, level = 5, class.name = "PacFIN_Species_Code", 
+                useStdcoef = TRUE)
+    ```
+
+```{r}
+
+shape = stdCoefs(shape_obj, classes = "PacFIN_Species_Code", "Wgt_g", 
+                 bonferroni = TRUE)
+
+est.list = estimate.outline.reconstruction(shape_obj)
+
+outline.reconstruction.plot(est.list, max.num.harmonics = 15)
+
+plotWavelet(shape, level = 5, class.name = "PacFIN_Species_Code", 
+            useStdcoef = TRUE)
+
+```
+
+## Morphometric comparison plots
+
+-   Box and whisker plots comparing the four otolith morphometrics between vermilion and sunset
+
+-   Statistical analysis:
+
+    -   Before comparing each group check data for distribution and variance
+
+    -   Compare groups using either a wilcoxon rank-sum test (non-normal) or student's t-test (normal and equal variance)
+
+| Scenario                       | Recommended Test       |
+|--------------------------------|------------------------|
+| Two groups, non-normal data    | Wilcoxon rank-sum test |
+| Two groups, normal + equal var | Student's t-test       |
+
+```{r}
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR")
+merged_data<-read.csv("merged.csv")
+View(merged_data)
+
+#Rename multiple columns
+View(fish_data)
+
+# Define morphometric columns
+morphometrics <- c("otolith.length", "otolith.width", "otolith.area", "otolith.perimeter")
+
+# Reshape data
+long_data <- fish_data %>%
+  dplyr::select(Species, all_of(morphometrics)) %>%
+  pivot_longer(cols = all_of(morphometrics),
+               names_to = "morphometric",
+               values_to = "value")
+
+# Create a list of plots for each morphometric
+plots <- long_data %>%
+  group_split(morphometric) %>%
+  lapply(function(df) {
+    morph_name <- unique(df$morphometric)
+    
+    ggplot(df, aes(x = Species, y = value)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = "",
+        y = morph_name  # dynamic y-axis label
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+  })
+
+# Combine plots with patchwork
+wrap_plots(plots, ncol = 2)
+
+# Save as high-res PNG
+ggsave("otolith_morphometrics-comp.png", plot = last_plot(), width = 8, height = 6, dpi = 300)
+
+# Run t-test (normal distributed data) or wilcoxon rank-sum test to compare otolith shape/size among populations
+library(rstatix)
+
+#Normally distributed data
+t_test_results <- list()
+
+for (metric in morphometrics) {
+  formula <- as.formula(paste(metric, "~ Species"))
+  result <- fish_data %>%
+    t_test(formula)
+
+  cat("\n\n---", metric, "---\n")
+  print(result)
+
+  t_test_results[[metric]] <- result
+}
+
+
+# NOT normally distributed 
+wilcox_results <- list()
+
+for (metric in morphometrics) {
+  formula <- as.formula(paste(metric, "~ Species"))
+  result <- fish_data %>% 
+    wilcox_test(formula)
+  
+  # Print summary
+  cat("\n\n---", metric, "---\n")
+  print(result)
+  
+  # Store result
+  wilcox_results[[metric]] <- result
+}
+
+```
+
+## Otolith shape analysis
+
+-   Load **vegan package** (used for multivariate ecological analyses
+
+-   Extract both the standardized wavelet coefficients (wavelet_data) and corresponding metadata (meta_data) - check that the number of rows (individuals) matches in both datasets.
+
+-   Perform Canonical Analysis of Principal Coordinates (CAP) to test how well otolith shape (wavelet data) can discriminate between species (can use 'PacFIN_Species_Code' or 'Species' column). I used euclidian distances between samples, since data are continuous measurements (wavelet coefficient shape descriptors) and euclidian preserves linear geometry.
+
+    -   `summary()`: Shows the proportion of variance explained by each CAP axis.
+
+    -   `anova()`: Tests overall significance of the CAP model.
+
+    -   `anova(..., by = "terms")`: Tests the significance of each term (e.g., species) individually.
+
+-   Make the CAP plot
+
+    -   Plot the CAP results (no points initially, just axes).
+
+    -   Adds colored points by species
+
+    -   Adds a legend mapping colors to species.
+
+    -   Extract CAP scores for each fish and store them with species labels for further plotting/analyses.
+
+    -   Plot ellipses for each group - there is code to plot this for 1 SD and 95% CI.
+
+    -   Use `ordispider()` to draw lines from group centroids to individual points.
+
+```{r}
+
+library(vegan)
+
+# Extract standardized wavelet coefficients
+wavelet_data <- shape@wavelet.coef.std
+
+# Extract corresponding metadata (fish info)
+meta_data <- shape@master.list
+
+# Make sure dimensions match
+dim(wavelet_data)  # n rows = individuals
+dim(meta_data)
+
+# CAP analysis
+cap_model <- capscale(wavelet_data ~ PacFIN_Species_Code, data = meta_data, distance = "euclidean")
+
+# View summary
+summary(cap_model)
+
+# Test significance of the model
+anova(cap_model)
+
+# Optional: Test individual terms (like 'Species')
+anova(cap_model, by = "terms")
+
+
+#VEGAN PLOT
+
+plot(cap_model, display = "sites", type = "n", main = "CAP of Otolith Wavelet Shape")
+points(cap_model, display = "sites", col = as.factor(meta_data$PacFIN_Species_Code), pch = 19)
+legend("topright", legend = unique(meta_data$PacFIN_Species_Code), 
+       col = 1:length(unique(meta_data$PacFIN_Species_Code)), pch = 19)
+
+# Extract CAP site scores
+cap_scores <- scores(cap_model, display = "sites")  # site (individual) scores
+scores_df <- as.data.frame(cap_scores)
+scores_df$species <- meta_data$PacFIN_Species_Code
+
+
+#SD confidence interval
+
+# Create a blank base plot
+plot(cap_model, display = "sites", type = "n", 
+     main = "CAP of Otolith Wavelet Shape",
+     xlab = "CAP1", ylab = "MDS1")
+
+# Add points colored by species
+points(cap_model, display = "sites", 
+       col = as.factor(meta_data$PacFIN_Species_Code), 
+       pch = 19)
+
+# Add 1 standard deviation ellipses around each species group
+ordiellipse(cap_model, groups = meta_data$PacFIN_Species_Code, 
+            display = "sites", kind = "sd", 
+            col = 1:2, lwd = 2, draw = "lines")
+
+# Add centroid “spiders” from group centroid to each point
+ordispider(cap_model, groups = meta_data$PacFIN_Species_Code, 
+           display = "sites", col = 1:2, lty = 2)
+
+# Add legend
+legend("topright", legend = levels(as.factor(meta_data$PacFIN_Species_Code)),
+       col = 1:2, pch = 19, lwd = 2, bty = "n")
+
+
+#### 95% confidence interval
+
+# Base CAP plot
+plot(cap_model, display = "sites", type = "n", 
+     main = "CAP of Otolith Shape (95% CI Ellipses)",
+     xlab = "CAP1", ylab = "MDS1")
+
+# Points
+points(cap_model, display = "sites", 
+       col = as.factor(meta_data$PacFIN_Species_Code), 
+       pch = 19)
+
+# 95% CI ellipses
+ordiellipse(cap_model, 
+            groups = meta_data$PacFIN_Species_Code, 
+            display = "sites", 
+            kind = "se", 
+            conf = 0.95, 
+            col = 1:2, lwd = 2, lty = 2)
+
+# Optional: centroids via spiders
+ordispider(cap_model, 
+           groups = meta_data$PacFIN_Species_Code, 
+           display = "sites", 
+           col = 1:2, lty = 3)
+
+# Legend
+legend("topright", 
+       legend = levels(as.factor(meta_data$PacFIN_Species_Code)),
+       col = 1:2, pch = 19, bty = "n")
+
+
+```
+
+```{r}
+
+write.csv(fish_data, "fish_data_measurements.csv", row.names = FALSE)
+
+```
+
+## Comparing different morphometric sources
+
+-   This is where I compare caliper vs. ImageJ vs. ShapeR measurements. Plotting linear relationships between the different sources. Include a 1:1 line in the plot and compare linear fit of the different morphometric sources to the 1:1 line.
+
+```{r}
+
+#Caliper Comparison
+ggplot(fish_data, aes(x = otolith.length, y = Caliper_conversion_mm)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") +
+  scale_x_continuous(name = "ShapeR Measurement", limits = c(15, NA)) +  # Start x-axis at 1
+  scale_y_continuous(name = "Caliper Measurement", limits = c(15, NA)) +  # Start y-axis at 1
+  labs(title = "Otolith Length (mm)") +
+  theme_minimal()
+
+ggplot(fish_data, aes(x = otolith.width, y = Caliper_width_mm)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") +
+  scale_x_continuous(name = "ShapeR Measurement", limits = c(8, NA)) +  # Start x-axis at 1
+  scale_y_continuous(name = "Caliper Measurement", limits = c(8, NA)) +  # Start y-axis at 1
+  labs(title = "Otolith Width (mm)") +
+  theme_minimal()
+
+
+
+#ImageJ Comparison
+ggplot(fish_data, aes(x = otolith.length, y = ImageJ_sulcus_mm)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") +
+  scale_x_continuous(name = "ShapeR Measurement", limits = c(15, NA)) +  # Start x-axis at 1
+  scale_y_continuous(name = "ImageJ Measurement", limits = c(15, NA)) +  # Start y-axis at 1
+  labs(title = "Otolith Length (mm)") +
+  theme_minimal()
+
+ggplot(fish_data, aes(x = otolith.width, y = ImageJ_width_pix_mm)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") +
+  scale_x_continuous(name = "ShapeR Measurement", limits = c(8, NA)) +  # Start x-axis at 1
+  scale_y_continuous(name = "ImageJ Measurement", limits = c(8, NA)) +  # Start y-axis at 1
+  labs(title = "Otolith Width (mm)") +
+  theme_minimal()
+
+```
+
+# Classifications of Individuals
+
+-   This chunk of code is running a cross-validation analysis using Linear Discriminant Analysis (LDA) to classify fish to their species based on wavelet shape descriptors extracted from their otoliths.
+
+-   The cross validation classification estimate produces a missclassification error
+
+```         
+-   **EX:** If you receive a misclassification error of 0.2051, this means 20.5% of fish were misclassified, or 79.5% were correctly classified
+
+-   May receive a "*Warning: variables are collinear*" warning - this comes from LDA beign applied to many correlated wavelet coefficients (common in shape analysis). It doesn't stop the analysis but warns that some predictors may be redundant.
+```
+
+```{r}
+
+library(MASS)     # For lda()
+library(ipred)    # For errorest()
+
+# Define prediction function
+mypredict.lda <- function(object, newdata) {
+  predict(object, newdata = newdata)$class
+}
+
+# Get data
+stdw <- getStdWavelet(shape)
+species <- factor(getMasterlist(shape)$PacFIN_Species_Code)
+dd <- data.frame(stdw = stdw, PacFIN_Species_Code = species)
+
+# Run cross-validation classification accuracy estimate
+errorest(PacFIN_Species_Code ~ ., data = dd, model = lda, estimator = "cv", 
+         predict = mypredict.lda, est.para = control.errorest(nboot = 1000))
+```
+
+```{r}
+#ImageJ sulcus groove comparison to fish length
+
+ggplot(fish_data, aes(x = ForkLength_cm, y = ImageJ_sulcus_mm)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") +
+  scale_x_continuous(name = "Fork Length (cm)", limits = c(60, NA)) +  # Start x-axis at 1
+  scale_y_continuous(name = "Otolith thickness", limits = c(2, NA)) +  # Start y-axis at 1
+  labs(title = "Fork Length - otolith thickness") +
+  theme_minimal()
+```
+
+RDA Analysis
+
+```{r}
+# Load the data
+library(vegan)
+library(tidyr)
+library(dplyr)
+library(readr)
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR/ShapeAnalysis")
+FISH<- read.csv("FISH.csv")
+FISH$PacFIN_Species_Code <- as.factor(FISH$PacFIN_Species_Code)
+print(FISH)
+print(class(FISH$PacFIN_Species_Code))
+cleanfish<-na.omit(FISH)
+#cleanfish = rep(unlist(cleanfish), nrow(wavelet_data))
+#df<-data.frame(wavelet_data, cleanfish=unlist(cleanfish))
+# the RDA model
+myrda <- rda(wavelet_data ~ PacFIN_Species_Code, data = FISH)
+# Summarize the RDA result
+summary(myrda)
+# Plot the RDA result
+plot(myrda)
+str(meta_data)
+
+plot(myrda, display = "sites", type = "n")
+points(myrda, display = "sites", col = as.factor(FISH$PacFIN_Species_Code), pch = 19)
+legend("topright", legend = unique(FISH$PacFIN_Species_Code), 
+       col = 1:length(unique(FISH$PacFIN_Species_Code)), pch = 19)
+
+```
+
+Otolith morphometric comparisons
+
+```{r}library(ggplot2)}
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR")
+#install.packages("tidyverse")
+library(tidyverse)
+
+
+area<-ggplot(fish_data, aes(Wgt_g, otolith.area, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE) 
+area
+
+length<-ggplot(fish_data, aes(Wgt_g, otolith.length, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE) 
+length
+
+perimeter<-ggplot(fish_data, aes(Wgt_g, otolith.perimeter,color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE) 
+perimeter
+
+width<-ggplot(fish_data, aes(Wgt_g, otolith.width,color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE)
+width
+
+
+```
+
+```{r}
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR")
+#install.packages("tidyverse")
+library(tidyverse)
+
+arealength<-ggplot(fish_data, aes(ForkLength_cm, otolith.area, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE) 
+arealength
+
+lengthlength<-ggplot(fish_data, aes(ForkLength_cm, otolith.length, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE) 
+lengthlength
+
+perimeterlength<-ggplot(fish_data, aes(ForkLength_cm, otolith.perimeter,color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE)
+perimeterlength
+
+widthlength<-ggplot(fish_data, aes(ForkLength_cm, otolith.width,color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE)
+widthlength
+
+
+```
+
+Examine the model summary to check the significance of the interaction term
+
+```{r}
+#ANCOVA check to see if we need to standardize
+# Examine the model summary to check the significance of the interaction term
+
+# Fit a model with an interaction term to test for equal slopes
+model_with_interaction_area <- lm(otolith.area ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_with_interaction_area)
+
+# Fit a model with an interaction term to test for equal slopes
+model_with_interaction_length <- lm(otolith.length ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_with_interaction_length)
+
+# Fit a model with an interaction term to test for equal slopes
+model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_with_interaction_perimeter)
+
+# Fit a model with an interaction term to test for equal slopes
+model_with_interaction_width <- lm(otolith.width ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_with_interaction_width)
+
+# If the interaction term is not significant, fit a model without the interaction
+model_without_interaction <- lm(otolith.width ~ PacFIN_Species_Code + Wgt_g, data = fish_data)
+summary(model_without_interaction)
+
+#In Summary: The otolith morphometric for area, length and perimeter are significant with otolith weight as a covariate, however not for otolith width
+
+#check fork length now
+# Fit a model with an interaction term to test for equal slopes
+# Examine the model summary to check the significance of the interaction term
+model_without_interaction_area <- lm(otolith.area ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_without_interaction_area)
+
+# Fit a model with an interaction term to test for equal slopes
+model_without_interaction_length <- lm(otolith.length ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_without_interaction_length)
+
+# Fit a model with an interaction term to test for equal slopes
+model_without_interaction_width <- lm(otolith.width ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_without_interaction_width)
+
+# Fit a model with an interaction term to test for equal slopes
+model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_with_interaction_perimeter)
+
+#In Summary: otolith area, otolith width and otolith length were not significant with Fork Length as a covariate. Otolith perimeter was found to be significant though with Fork Length as a covariate
+```
+
+```{r}
+#check Age now
+# Fit a model with an interaction term to test for equal slopes
+# Examine the model summary to check the significance of the interaction term
+model_without_interaction_area <- lm(otolith.area ~ PacFIN_Species_Code *Age_years, data = fish_data)
+summary(model_without_interaction_area)
+
+# Fit a model with an interaction term to test for equal slopes
+model_without_interaction_length <- lm(otolith.length ~ PacFIN_Species_Code * Age_years, data = fish_data)
+summary(model_without_interaction_length)
+
+# Fit a model with an interaction term to test for equal slopes
+model_without_interaction_width <- lm(otolith.width ~ PacFIN_Species_Code * Age_years, data = fish_data)
+summary(model_without_interaction_width)
+
+# Fit a model with an interaction term to test for equal slopes
+model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code * Age_years, data = fish_data)
+summary(model_with_interaction_perimeter)
+                      
+# Run t-test (normal distributed data)
+library(rstatix)
+
+# Compute t-test
+area <- t.test(otolith.area ~ PacFIN_Species_Code, data=fish_data)
+area
+
+# Compute t-test
+length <- t.test(otolith.length ~ PacFIN_Species_Code, data=fish_data)
+length
+
+# Compute t-test
+perimeter <- t.test(otolith.perimeter ~ PacFIN_Species_Code, data=fish_data)
+perimeter
+
+# Compute t-test
+width <- t.test(otolith.width ~ PacFIN_Species_Code, data=fish_data)
+width
+```
+
+```{r}
+ageperimeter<-ggplot(fish_data, aes(Age_years, otolith.perimeter, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm") 
+ageperimeter
+
+agearea<-ggplot(fish_data, aes(Age_years, otolith.area, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm") 
+agearea
+
+agelength<-ggplot(fish_data, aes(Age_years, otolith.length, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm") 
+agelength
+
+agewidth<-ggplot(fish_data, aes(Age_years, otolith.width, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm") 
+agewidth
+```
+
+```{r}
+#standardizing for fork length
+library(dplyr)
+    df_standardized <- meta_data %>%
+      mutate(across(c(otolith.area, ForkLength_cm), ~scale(.) %>% as.numeric()))
+      mutate(across(c(otolith.length, ForkLength_cm), ~scale(.) %>% as.numeric()))
+      mutate(across(c(otolith.perimeter, ForkLength_cm), ~scale(.) %>% as.numeric()))
+      mutate(across(c(otolith.width, ForkLength_cm), ~scale(.) %>% as.numeric()))
+
+    # Display the updated data frame (first few rows)
+    head(df_standardized)
+```
+
+Boxplot analysis following standardization
+
+```{r}
+#Boxplot analysis
+ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_area)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith area"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+#Boxplot analysis
+ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_length)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith length"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+#Boxplot analysis
+ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_perimeter)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith perimeter"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+#Boxplot analysis
+ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_width)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith width"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+```
+
+```{r}
+
+```
+
+```{r}
+
+library(ggplot2)
+
+
+# Basic histogram with ggplot2
+ggplot(meta_data, aes(x = otolith_area)) +
+  geom_histogram()
+
+# Basic histogram with ggplot2
+ggplot(meta_data, aes(x = otolith_length)) +
+  geom_histogram()
+
+# Basic histogram with ggplot2
+ggplot(meta_data, aes(x = otolith_perimeter)) +
+  geom_histogram()
+
+# Basic histogram with ggplot2
+ggplot(meta_data, aes(x = otolith_width)) +
+  geom_histogram()
+
+
+```
+
+```{r}
+#Ratio analysis
+    library(dplyr)
+    # Assuming 'iris' dataset for demonstration
+    fish_data%>%
+      group_by(PacFIN_Species_Code) %>%
+      summarize(Otolith.perimeter = mean(otolith.perimeter / Wgt_g))
+     
+    
+```
+
+-   Adjusting coefficients for fish length and wavelet/fourier reconstruct
+
+    -   **stdCoefs** argument evaluates each Wavelet and Fourier coefficient and adjusts the otolith shape with respect to allometric relationships with the fish lengths.
+
+        -   Those coefficients which show interaction (P\<0.05), between population and length, are omitted automatically.
+
+        -   In order to account for increased alpha error due to multiple testing of the different coefficients it is possible to conduct the Bonferroni adjustment
+
+    -   **estimate.outline.reconstruction** argument estimates the quality of the Wavelet and Fourier reconstruction by comparing how it deviates from otolith outline
+
+        -   The quality increases with the increase of Wavelet/Fourier coefficients used
+
+-   The **plotWavelet** argument can be used to inspect how the variation in the Wavelet coefficients is dependent on the position along the outline. The proportion of variation among groups, the interclass correlation (ICC), gives further information about the partition of the variation along the outline
+
+```{r}
+
+#Wavelet analysis
+library(readr)
+library(data.table)
+library(here)
+#Set project path to the folder 'ShapeAnalysis'
+shape_obj_fish <- shapeR(
+  project.path = here("ShapeAnalysis"), 
+  info.file = "fish_data_measurements.csv"
+)
+
+# Trace orange outline around otolith - saves in Original_with_outline
+shape_obj_fish = detect.outline(shape_obj_fish, threshold = 0.20, write.outline.w.org = FALSE)
+
+# Smooth outlines 
+shape_obj_fish = smoothout(shape_obj_fish, n = 100)
+
+# Extract shape coefficient
+shape_obj_fish = generateShapeCoefficients(shape_obj_fish)
+
+# Connect data file 'fish_data_measurements.csv' to the outlines
+shape_obj_fish = enrich.master.list(shape_obj_fish)
+
+# Save shape object
+save(shape_obj_fish, file = "VRML-SUNS-Species.Rdata")
+
+#shape analysis
+shape = stdCoefs(shape_obj_fish, classes = "PacFIN_Species_Code", "ForkLength_cm", 
+                 bonferroni = FALSE)
+
+est.list = estimate.outline.reconstruction(shape_obj_fish)
+
+outline.reconstruction.plot(est.list, max.num.harmonics = 15)
+
+plotWavelet(shape, level = 5, class.name = "PacFIN_Species_Code", 
+            useStdcoef = TRUE)
+
+
+
+
+
+
+
+
+
+
+
+```
+
+```{r}
+
+```
