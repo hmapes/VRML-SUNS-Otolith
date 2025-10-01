@@ -10,7 +10,6 @@ editor: visual
 This chunk load shapeR and retrieve data, as well as sets project path folder.
 
 ```{r, warning=FALSE}
-
 # load shape R and retrieve data
 library(here)
 library(shapeR)
@@ -18,7 +17,7 @@ library(shapeR)
 #Set project path to the folder 'ShapeAnalysis'
 shape_obj <- shapeR(
   project.path = here("ShapeAnalysis"), 
-  info.file = "FISH.csv"
+  info.file = "fish_data_cleaned_agemat.csv"
 )
 
 ```
@@ -60,7 +59,7 @@ shape_obj = generateShapeCoefficients(shape_obj)
 shape_obj = enrich.master.list(shape_obj)
 
 # Save shape object
-save(shape_obj, file = "VRML-SUNS.Rdata")
+save(shape_obj, file = "VRML-SUNS-agemat.Rdata")
 
 ```
 
@@ -111,15 +110,23 @@ measurements <- getMeasurements(shape_obj)
 # Otolith area
 tapply(getMeasurements(shape_obj)$otolith.area, 
        getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+tapply(getMeasurements(shape_obj)$otolith.area, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, sd)
 # Otolith perimeter
 tapply(getMeasurements(shape_obj)$otolith.perimeter, 
        getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+tapply(getMeasurements(shape_obj)$otolith.perimeter, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, sd)
 # Otolith length
 tapply(getMeasurements(shape_obj)$otolith.length, 
        getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+tapply(getMeasurements(shape_obj)$otolith.length, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, sd)
 # Otolith width
 tapply(getMeasurements(shape_obj)$otolith.width, 
        getMasterlist(shape_obj)$PacFIN_Species_Code, mean)
+tapply(getMeasurements(shape_obj)$otolith.width, 
+       getMasterlist(shape_obj)$PacFIN_Species_Code, sd)
 
 ```
 
@@ -138,7 +145,7 @@ tapply(getMeasurements(shape_obj)$otolith.width,
 -   **plotWavelet** argument can be used to inspect how the variation in the Wavelet coefficients is dependent on the position along the outline. The proportion of variation among groups, the interclass correlation (ICC), gives further information about the partition of the variation along the outline
 
     ```{r}
-    shape = stdCoefs(shape_obj, classes = "PacFIN_Species_Code", "Wgt_g", 
+    shape = stdCoefs(shape_obj, classes = "PacFIN_Species_Code", "ForkLength_cm", 
                      bonferroni = TRUE)
 
     est.list = estimate.outline.reconstruction(shape_obj)
@@ -160,6 +167,7 @@ outline.reconstruction.plot(est.list, max.num.harmonics = 15)
 
 plotWavelet(shape, level = 5, class.name = "PacFIN_Species_Code", 
             useStdcoef = TRUE)
+
 
 ```
 
@@ -184,15 +192,32 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 library(patchwork)
-setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR")
-merged_data<-read.csv("merged.csv")
-View(merged_data)
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR_VRML_SUNS")
 
-#Rename multiple columns
 View(fish_data)
 
+fish_data$otolithperimeter_fl_std<-fish_data$otolith.perimeter/fish_data$ForkLength_mm
+fish_data$otolitharea_fl_std<-fish_data$otolith.area/fish_data$ForkLength_mm
+fish_data$otolithlength_fl_std<-fish_data$otolith.length/fish_data$ForkLength_mm
+fish_data$otolithwidth_fl_std<-fish_data$otolith.width/fish_data$ForkLength_mm
+fish_data$otoliththickness_fl_std<-fish_data$Caliper_conversion_mm/fish_data$ForkLength_mm
+fish_data$sulcus_fl_std<-fish_data$ImageJ_sulcus_mm/fish_data$ForkLength_mm
+
+View(fish_data)
+  
+
+
+#non-parametric check
+wilcox.test(otolitharea_fl_std ~ PacFIN_Species_Code, data = fish_data)
+wilcox.test(otolithlength_fl_std ~ PacFIN_Species_Code, data = fish_data)
+wilcox.test(otolithwidth_fl_std ~ PacFIN_Species_Code, data = fish_data)
+wilcox.test(otolithperimeter_fl_std ~ PacFIN_Species_Code, data = fish_data)
+wilcox.test(otoliththickness_fl_std ~ PacFIN_Species_Code, data = fish_data)
+wilcox.test(sulcus_fl_std ~ PacFIN_Species_Code, data = fish_data)
+
+
 # Define morphometric columns
-morphometrics <- c("otolith.length", "otolith.width", "otolith.area", "otolith.perimeter")
+morphometrics <- c("otolithlength_fl_std", "otolithwidth_fl_std", "otolitharea_fl_std", "otolithperimeter_fl_std", "otoliththickness_fl_std", "sulcus_fl_std")
 
 # Reshape data
 long_data <- fish_data %>%
@@ -209,7 +234,7 @@ plots <- long_data %>%
     
     ggplot(df, aes(x = Species, y = value)) +
       geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
-      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      geom_jitter(width = 0.05, alpha = 0.3, size = 0.7) +
       theme_minimal() +
       labs(
         title = NULL,
@@ -223,7 +248,7 @@ plots <- long_data %>%
   })
 
 # Combine plots with patchwork
-wrap_plots(plots, ncol = 2)
+wrap_plots(plots, ncol = 3)
 
 # Save as high-res PNG
 ggsave("otolith_morphometrics-comp.png", plot = last_plot(), width = 8, height = 6, dpi = 300)
@@ -407,42 +432,13 @@ write.csv(fish_data, "fish_data_measurements.csv", row.names = FALSE)
 #Caliper Comparison
 ggplot(fish_data, aes(x = otolith.length, y = Caliper_conversion_mm)) +
   geom_point(alpha = 0.6, color = "blue") +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
+  geom_abline(slope = 1, intercept = 0, color = "red", size = 1) +
   geom_smooth(method = "lm", se = TRUE, color = "black") +
   scale_x_continuous(name = "ShapeR Measurement", limits = c(15, NA)) +  # Start x-axis at 1
   scale_y_continuous(name = "Caliper Measurement", limits = c(15, NA)) +  # Start y-axis at 1
   labs(title = "Otolith Length (mm)") +
   theme_minimal()
 
-ggplot(fish_data, aes(x = otolith.width, y = Caliper_width_mm)) +
-  geom_point(alpha = 0.6, color = "blue") +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
-  geom_smooth(method = "lm", se = TRUE, color = "black") +
-  scale_x_continuous(name = "ShapeR Measurement", limits = c(8, NA)) +  # Start x-axis at 1
-  scale_y_continuous(name = "Caliper Measurement", limits = c(8, NA)) +  # Start y-axis at 1
-  labs(title = "Otolith Width (mm)") +
-  theme_minimal()
-
-
-
-#ImageJ Comparison
-ggplot(fish_data, aes(x = otolith.length, y = ImageJ_sulcus_mm)) +
-  geom_point(alpha = 0.6, color = "blue") +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
-  geom_smooth(method = "lm", se = TRUE, color = "black") +
-  scale_x_continuous(name = "ShapeR Measurement", limits = c(15, NA)) +  # Start x-axis at 1
-  scale_y_continuous(name = "ImageJ Measurement", limits = c(15, NA)) +  # Start y-axis at 1
-  labs(title = "Otolith Length (mm)") +
-  theme_minimal()
-
-ggplot(fish_data, aes(x = otolith.width, y = ImageJ_width_pix_mm)) +
-  geom_point(alpha = 0.6, color = "blue") +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
-  geom_smooth(method = "lm", se = TRUE, color = "black") +
-  scale_x_continuous(name = "ShapeR Measurement", limits = c(8, NA)) +  # Start x-axis at 1
-  scale_y_continuous(name = "ImageJ Measurement", limits = c(8, NA)) +  # Start y-axis at 1
-  labs(title = "Otolith Width (mm)") +
-  theme_minimal()
 
 ```
 
@@ -481,12 +477,11 @@ errorest(PacFIN_Species_Code ~ ., data = dd, model = lda, estimator = "cv",
 ```{r}
 #ImageJ sulcus groove comparison to fish length
 
-ggplot(fish_data, aes(x = ForkLength_cm, y = ImageJ_sulcus_mm)) +
+ggplot(fish_data, aes(x = ImageJ_sulcus_mm, y = ForkLength_cm)) +
   geom_point(alpha = 0.6, color = "blue") +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 1) +
-  geom_smooth(method = "lm", se = TRUE, color = "black") +
-  scale_x_continuous(name = "Fork Length (cm)", limits = c(60, NA)) +  # Start x-axis at 1
-  scale_y_continuous(name = "Otolith thickness", limits = c(2, NA)) +  # Start y-axis at 1
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  scale_x_continuous(name = "otolith thickness", limits = c(0.5, NA)) +  # Start x-axis at 1
+  scale_y_continuous(name = "Fork length", limits = c(20, NA)) +  # Start y-axis at 1
   labs(title = "Fork Length - otolith thickness") +
   theme_minimal()
 ```
@@ -499,303 +494,232 @@ library(vegan)
 library(tidyr)
 library(dplyr)
 library(readr)
-setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR/ShapeAnalysis")
-FISH<- read.csv("FISH.csv")
-FISH$PacFIN_Species_Code <- as.factor(FISH$PacFIN_Species_Code)
-print(FISH)
-print(class(FISH$PacFIN_Species_Code))
-cleanfish<-na.omit(FISH)
-#cleanfish = rep(unlist(cleanfish), nrow(wavelet_data))
-#df<-data.frame(wavelet_data, cleanfish=unlist(cleanfish))
-# the RDA model
-myrda <-rda(wavelet_data ~ PacFIN_Species_Code, data = FISH)
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR_VRML_SUNS/ShapeAnalysis")
+View(fish_data)
+fish_data$PacFIN_Species_Code <- as.factor(fish_data$PacFIN_Species_Code)
+myrda <-rda(wavelet_data ~ PacFIN_Species_Code, data= fish_data)
 # Summarize the RDA result
 summary(myrda)
 # Plot the RDA result
 plot(myrda)
 str(meta_data)
+#plot(myrda, display = "sites", type = "n")
+#points(myrda, display = "sites", col = as.factor(FISH$PacFIN_Species_Code), pch = 19)
+#legend("topright", legend = unique(FISH$PacFIN_Species_Code), 
+       #col = 1:length(unique(FISH$PacFIN_Species_Code)), pch = 19)
 
 plot(myrda, display = "sites", type = "n")
-points(myrda, display = "sites", col = as.factor(FISH$PacFIN_Species_Code), pch = 19)
-legend("topright", legend = unique(FISH$PacFIN_Species_Code), 
-       col = 1:length(unique(FISH$PacFIN_Species_Code)), pch = 19)
+points(myrda, display = "sites", col = as.factor(fish_data$PacFIN_Species_Code), pch = 19)
+legend("topright", legend = unique(fish_data$PacFIN_Species_Code), 
+       col = 1:length(unique(fish_data$PacFIN_Species_Code)), pch = 19)
+
 
 ```
 
 Otolith morphometric comparisons
 
-```{r}library(ggplot2)}
-setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR")
-#install.packages("tidyverse")
-library(tidyverse)
+```{r}
+library(ggplot2)
 
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR_VRML_SUNS") #install.packages("tidyverse") library(tidyverse)
 
-area<-ggplot(fish_data, aes(Wgt_g, otolith.area, color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE) 
+area<-ggplot(fish_data, aes(Wgt_g, otolith.area, color = PacFIN_Species_Code))+ geom_point(alpha = 0.6) + geom_smooth(method = "lm", se = TRUE)
 area
 
-length<-ggplot(fish_data, aes(Wgt_g, otolith.length, color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm", se = TRUE) 
+length<-ggplot(fish_data, aes(Wgt_g, otolith.length, color = PacFIN_Species_Code))+ geom_point(alpha = 0.6)+ geom_smooth(method = "lm", se = TRUE)
 length
 
-perimeter<-ggplot(fish_data, aes(Wgt_g, otolith.perimeter,color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm", se = TRUE) 
+perimeter<-ggplot(fish_data, aes(Wgt_g, otolith.perimeter,color = PacFIN_Species_Code))+ geom_point(alpha = 0.6)+ geom_smooth(method = "lm", se = TRUE)
 perimeter
 
-width<-ggplot(fish_data, aes(Wgt_g, otolith.width,color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm", se = TRUE)
+width<-ggplot(fish_data, aes(Wgt_g, otolith.width,color = PacFIN_Species_Code))+ geom_point(alpha = 0.6)+ geom_smooth(method = "lm", se = TRUE)
 width
 
 
 ```
 
 ```{r}
-setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR")
-#install.packages("tidyverse")
-library(tidyverse)
+library(ggplot2)
 
-arealength<-ggplot(fish_data, aes(ForkLength_cm, otolith.area, color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm", se = TRUE) 
-arealength
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR_VRML_SUNS") #install.packages("tidyverse") library(tidyverse)
 
-lengthlength<-ggplot(fish_data, aes(ForkLength_cm, otolith.length, color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm", se = TRUE) 
-lengthlength
+area_length<-ggplot(fish_data, aes(ForkLength_cm, otolith.area, color = PacFIN_Species_Code))+ geom_point(alpha = 0.6) + geom_smooth(method = "lm", se = TRUE)
+area_length
 
-perimeterlength<-ggplot(fish_data, aes(ForkLength_cm, otolith.perimeter,color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm", se = TRUE)
-perimeterlength
+length_length<-ggplot(fish_data, aes(ForkLength_cm, otolith.length, color = PacFIN_Species_Code))+ geom_point(alpha = 0.6)+ geom_smooth(method = "lm", se = TRUE)
+length_length
 
-widthlength<-ggplot(fish_data, aes(ForkLength_cm, otolith.width,color = PacFIN_Species_Code))+
-  geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm", se = TRUE)
-widthlength
+perimeter_length<-ggplot(fish_data, aes(ForkLength_cm, otolith.perimeter,color = PacFIN_Species_Code))+ geom_point(alpha = 0.6)+ geom_smooth(method = "lm", se = TRUE)
+perimeter_length
 
+width_length<-ggplot(fish_data, aes(ForkLength_cm, otolith.width,color = PacFIN_Species_Code))+ geom_point(alpha = 0.6)+ geom_smooth(method = "lm", se = TRUE)
+width_length
+```
 
+```         
 ```
 
 Examine the model summary to check the significance of the interaction term
 
-```{r}
-#ANCOVA check to see if we need to standardize
-# Examine the model summary to check the significance of the interaction term
-
-# Fit a model with an interaction term to test for equal slopes
-model_with_interaction_area <- lm(otolith.area ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
-summary(model_with_interaction_area)
-
-# Fit a model with an interaction term to test for equal slopes
-model_with_interaction_length <- lm(otolith.length ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
-summary(model_with_interaction_length)
-
-# Fit a model with an interaction term to test for equal slopes
-model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
-summary(model_with_interaction_perimeter)
-
-# Fit a model with an interaction term to test for equal slopes
-model_with_interaction_width <- lm(otolith.width ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
-summary(model_with_interaction_width)
-
-# If the interaction term is not significant, fit a model without the interaction
-model_without_interaction <- lm(otolith.width ~ PacFIN_Species_Code + Wgt_g, data = fish_data)
-summary(model_without_interaction)
-
-#In Summary: The otolith morphometric for area, length and perimeter are significant with otolith weight as a covariate, however not for otolith width
-
-#check fork length now
-# Fit a model with an interaction term to test for equal slopes
-# Examine the model summary to check the significance of the interaction term
-model_without_interaction_area <- lm(otolith.area ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
-summary(model_without_interaction_area)
-
-# Fit a model with an interaction term to test for equal slopes
-model_without_interaction_length <- lm(otolith.length ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
-summary(model_without_interaction_length)
-
-# Fit a model with an interaction term to test for equal slopes
-model_without_interaction_width <- lm(otolith.width ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
-summary(model_without_interaction_width)
-
-# Fit a model with an interaction term to test for equal slopes
-model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
-summary(model_with_interaction_perimeter)
-
-#In Summary: otolith area, otolith width and otolith length were not significant with Fork Length as a covariate. Otolith perimeter was found to be significant though with Fork Length as a covariate
-
-model_sulcus<- lm(ImageJ_sulcus_mm ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
-summary(model_sulcus)
-
-model_sulcus<- lm(ImageJ_sulcus_mm ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
-summary(model_sulcus)
-
-#ANCOVA for otlith sulcus groove measurement does NOT need standardization
-
-model_thick<- lm(Caliper_conversion_mm ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
-summary(model_thick)
-
-model_thickness<- lm(Caliper_conversion_mm ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
-summary(model_thickness)
-
-#ANCOVA does indicate a significant interaction between otolith thickness and otolith weight but not for fork length
-
-#proceed with standardization between otolith thickness and otolith weight
+```         
 ```
 
-```{r}
-#check Age now
-# Fit a model with an interaction term to test for equal slopes
-# Examine the model summary to check the significance of the interaction term
-model_without_interaction_area <- lm(otolith.area ~ PacFIN_Species_Code *Age_years, data = fish_data)
-summary(model_without_interaction_area)
-
-# Fit a model with an interaction term to test for equal slopes
-model_without_interaction_length <- lm(otolith.length ~ PacFIN_Species_Code * Age_years, data = fish_data)
-summary(model_without_interaction_length)
-
-# Fit a model with an interaction term to test for equal slopes
-model_without_interaction_width <- lm(otolith.width ~ PacFIN_Species_Code * Age_years, data = fish_data)
-summary(model_without_interaction_width)
-
-# Fit a model with an interaction term to test for equal slopes
-model_with_interaction_perimeter <- lm(otolith.perimeter ~ PacFIN_Species_Code * Age_years, data = fish_data)
-summary(model_with_interaction_perimeter)
-
-#ANCOVA notes a significant interaction between age and otolith area, length, perimeter and width
-
-#proceed with standardization?
-                      
+```         
 ```
 
 ```{r}
 ageperimeter<-ggplot(fish_data, aes(Age_years, otolith.perimeter, color = PacFIN_Species_Code))+
   geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm") 
+   geom_smooth(method = "lm", se = TRUE) 
 ageperimeter
 
 agearea<-ggplot(fish_data, aes(Age_years, otolith.area, color = PacFIN_Species_Code))+
   geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm") 
+   geom_smooth(method = "lm", se = TRUE)
 agearea
 
 agelength<-ggplot(fish_data, aes(Age_years, otolith.length, color = PacFIN_Species_Code))+
   geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm") 
+   geom_smooth(method = "lm", se = TRUE) 
 agelength
 
 agewidth<-ggplot(fish_data, aes(Age_years, otolith.width, color = PacFIN_Species_Code))+
   geom_point(alpha = 0.6)+
-   geom_smooth(method = "lm") 
+   geom_smooth(method = "lm", se = TRUE) 
 agewidth
+
+
+otowgt_age<-ggplot(fish_data, aes(Wgt_g, Age_years, color = PacFIN_Species_Code))+
+  geom_point(alpha = 0.6)+
+   geom_smooth(method = "lm", se = TRUE) 
+otowgt_age
 ```
 
-```{r}
-#standardizing for fork length
-library(dplyr)
-    df_standardized <- meta_data %>%
-      mutate(across(c(otolith.area, ForkLength_cm), ~scale(.) %>% as.numeric()))
-      mutate(across(c(otolith.length, ForkLength_cm), ~scale(.) %>% as.numeric()))
-      mutate(across(c(otolith.perimeter, ForkLength_cm), ~scale(.) %>% as.numeric()))
-      mutate(across(c(otolith.width, ForkLength_cm), ~scale(.) %>% as.numeric()))
-
-    # Display the updated data frame (first few rows)
-    head(df_standardized)
+```         
 ```
 
 Boxplot analysis following standardization
 
 ```{r}
 #Boxplot analysis
-ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_area)) +
-      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
-      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
-      theme_minimal() +
-      labs(
-        title = NULL,
-        x = " Species",
-        y = "Otolith area"
-      ) +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(size = 14, face = "bold")
-      )
-
-#Boxplot analysis
-ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_length)) +
-      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
-      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
-      theme_minimal() +
-      labs(
-        title = NULL,
-        x = " Species",
-        y = "Otolith length"
-      ) +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(size = 14, face = "bold")
-      )
-
-#Boxplot analysis
-ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_perimeter)) +
-      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
-      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
-      theme_minimal() +
-      labs(
-        title = NULL,
-        x = " Species",
-        y = "Otolith perimeter"
-      ) +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(size = 14, face = "bold")
-      )
-
-#Boxplot analysis
-ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith_width)) +
-      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
-      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
-      theme_minimal() +
-      labs(
-        title = NULL,
-        x = " Species",
-        y = "Otolith width"
-      ) +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(size = 14, face = "bold")
-      )
-```
-
-```{r}
-
-```
-
-```{r}
-
+library(rstatix)
 library(ggplot2)
+View(fish_data)
+
+fish_data$otolithperimeter_fl_std<-fish_data$otolith.perimeter/fish_data$ForkLength_cm
+fish_data$otolitharea_fl_std<-fish_data$otolith.area/fish_data$ForkLength_cm
+fish_data$otolithlength_fl_std<-fish_data$otolith.length/fish_data$ForkLength_cm
+fish_data$otolithwidth_fl_std<-fish_data$otolith.width/fish_data$ForkLength_cm
+fish_data$otoliththickness_fl_std<-fish_data$Caliper_conversion_mm/fish_data$ForkLength_cm
+fish_data$sulcus_fl_std<-fish_data$ImageJ_sulcus_mm/fish_data$ForkLength_cm
+View(fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolithperimeter_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith perimeter standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+t.test((otolithperimeter_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolitharea_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith area standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+t.test((otolitharea_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolithlength_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith length standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+t.test((otolithlength_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolithwidth_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith width standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold"))
 
 
-# Basic histogram with ggplot2
-ggplot(meta_data, aes(x = otolith_area)) +
-  geom_histogram()
+t.test((otolithwidth_fl_std) ~ PacFIN_Species_Code, data = fish_data)
 
-# Basic histogram with ggplot2
-ggplot(meta_data, aes(x = otolith_length)) +
-  geom_histogram()
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otoliththickness_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith thickness standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold"))
 
-# Basic histogram with ggplot2
-ggplot(meta_data, aes(x = otolith_perimeter)) +
-  geom_histogram()
+t.test((otoliththickness_fl_std) ~ PacFIN_Species_Code, data = fish_data)
 
-# Basic histogram with ggplot2
-ggplot(meta_data, aes(x = otolith_width)) +
-  geom_histogram()
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = sulcus_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith sulcus groove standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold"))
+
+t.test((sulcus_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+#Boxplot analysis
+
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+
 
 
 ```
@@ -806,7 +730,7 @@ ggplot(meta_data, aes(x = otolith_width)) +
     # Assuming 'iris' dataset for demonstration
     fish_data%>%
       group_by(PacFIN_Species_Code) %>%
-      summarize(Otolith.perimeter = mean(otolith.perimeter / Wgt_g))
+      summarize(Otolith.perimeter = mean(otolith.perimeter / ForkLength_cm))
      
     
 ```
@@ -852,7 +776,7 @@ shape_obj_fish = enrich.master.list(shape_obj_fish)
 save(shape_obj_fish, file = "VRML-SUNS-Species.Rdata")
 
 #shape analysis
-shape = stdCoefs(shape_obj_fish, classes = "Species", "ForkLength_cm", 
+shape = stdCoefs(shape_obj_fish, classes = "PacFIN_Species_Code", "Wgt_g", 
                  bonferroni = TRUE)
 
 est.list = estimate.outline.reconstruction(shape_obj_fish)
@@ -862,22 +786,468 @@ outline.reconstruction.plot(est.list, max.num.harmonics = 15)
 plotWavelet(shape, level = 5, class.name = "Species", 
             useStdcoef = TRUE)
 
-
-
-
-
-
-
-
-
-
-
 ```
 
 ```{r}
 #otolith weight - age relationship
 library(ggplot2)
 
-p<-ggplot(fish_data, aes(Age_years,Wgt_g, color = PacFIN_Species_Code))
+p<-ggplot(fish_data, aes(Age_years, Wgt_g, color = PacFIN_Species_Code))+
+  geom_point(alpa=0.5)+
+  geom_smooth(method = "lm", se = TRUE)
 p
+```
+
+```{r}
+#age - length relationship
+library(ggplot2)
+
+p<-ggplot(fish_data, aes(Age_years, ForkLength_cm, color = PacFIN_Species_Code))+
+  geom_point(alpa=0.5)+
+  geom_smooth(method = "lm", se = TRUE)
+p
+```
+
+```{r}
+#Sulcus - otolith weight
+library(ggplot2)
+
+p<-ggplot(fish_data, aes(Wgt_g, ImageJ_sulcus_mm, color = PacFIN_Species_Code))+
+  geom_point(alpa=0.5)+
+  geom_smooth(method = "lm", se = TRUE)
+p
+
+p2<-ggplot(fish_data, aes(ForkLength_cm, ImageJ_sulcus_mm, color = PacFIN_Species_Code))+
+  geom_point(alpa=0.5)+
+  geom_smooth(method = "lm", se = TRUE)
+p2
+
+model_sulcus<- lm(ImageJ_sulcus_mm ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_sulcus)
+
+model_sulcus<- lm(ImageJ_sulcus_mm ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_sulcus)
+
+#ANCOVA for otlith sulcus groove measurement does NOT need standardization
+
+#thickness - otolith weight
+p3<-ggplot(fish_data, aes(Caliper_conversion_mm, Wgt_g, color = PacFIN_Species_Code))+
+  geom_point(alpa=0.5)+
+  geom_smooth(method = "lm", se = TRUE)
+p3
+
+p4<-ggplot(fish_data, aes(Caliper_conversion_mm, ForkLength_cm, color = PacFIN_Species_Code))+
+  geom_point(alpa=0.5)+
+  geom_smooth(method = "lm", se = TRUE)
+p4
+
+model_thick<- lm(Caliper_conversion_mm ~ PacFIN_Species_Code * Wgt_g, data = fish_data)
+summary(model_thick)
+
+model_thickness<- lm(Caliper_conversion_mm ~ PacFIN_Species_Code * ForkLength_cm, data = fish_data)
+summary(model_thickness)
+
+#ANCOVA does indicate a significant interaction between otolith thickness and otolith weight but not for fork length
+
+#proceed with standardization between otolith thickness and otolith weight
+
+#Boxplot analysis
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = ImageJ_sulcus_mm)) +
+      geom_boxplot(outlier.shape = NA,fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith sulcus length (mm)"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+library(rstatix)
+library(ggplot2)
+t.test(ImageJ_sulcus_mm ~ PacFIN_Species_Code, data = meta_data)
+
+#Boxplot analysis
+ggplot(meta_data, aes(x = PacFIN_Species_Code, y = otolith.width)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith width (mm)"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+t.test(otolith.width ~ PacFIN_Species_Code, data = meta_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = Wgt_g)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith weight (g)"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+t.test(Wgt_g ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolith.area_wgt)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith weight area standardized"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+t.test(otolith.area_wgt ~ PacFIN_Species_Code, data = fish_data)
+```
+
+```         
+```
+
+PCA analysis
+
+```{r}
+library('corrr')
+library("ggcorrplot")
+library("FactoMineR")
+library("factoextra")
+library("tidyverse")
+library("ggplot2")
+
+str(fish_data)
+numericaldat<-fish_data[,267:272]
+head(numericaldat)
+
+data.pca <- princomp(numericaldat)
+summary(data.pca)
+
+data.pca$loadings[, 1:2]
+fviz_eig(data.pca, addlabels = TRUE)
+fviz_pca_var(data.pca, col.var = "cos2",
+            gradient.cols = c("purple", "orange", "green", "brown"),
+            repel = TRUE)
+
+#Look between species
+# Store the Species column separately for plotting later
+species_labels <- fish_data$PacFIN_Species_Code
+
+# Create a new data frame with only the numeric columns
+numeric_data <- fish_data %>% select(-PacFIN_Species_Code, -key, -FishInfoID, -Year, -Field_ID, -Vessel_Abbreviated, -Vessel, -Genetic.Notes, -Set.ID,-Site,-Collection_Date,-LATDD,-LONDD,-Depth_m,-Wt_kg, -Sex,-Otolith_Num,-FCNum,-FieldNotes,-Species,-Collection,-On.Target.Reads,-X..GT,-Age_years, -Wgt_g,-L_or_R,-FT_NIR_ID,-Scanned,-picname,-Image_taken,-folder,-cal,-Image...Scanning.Notes, -Caliper_otolith_thickness_mm,-ImageJ_rostrum_mm,-otolitharea_wgt_std, -otolithlength_wgt_std, -otolithperimeter_wgt_std, -otolithwidth_wgt_std, -otolithperimeter_fl_std, -otoliththickness_wgt_std, -mean.radii,	-Ws0c1,	-Ws1c1,	-Ws1c2,	-Ws2c1,	-Ws2c2,	-Ws2c3,	-Ws2c4,	-Ws3c1,	-Ws3c2,	-Ws3c3,	-Ws3c4,	-Ws3c5,	-Ws3c6,	-Ws3c7,	-Ws3c8,	-Ws4c1,	-Ws4c2,	-Ws4c3,	-Ws4c4,	-Ws4c5,	-Ws4c6,	-Ws4c7,	-Ws4c8,	-Ws4c9,	-Ws4c10,	-Ws4c11,	-Ws4c12,	-Ws4c13,	-Ws4c14,	-Ws4c15,	-Ws4c16,	-Ws5c1,	-Ws5c2,	-Ws5c3,	-Ws5c4,	-Ws5c5,	-Ws5c6,	-Ws5c7,	-Ws5c8,	-Ws5c9,	-Ws5c10,	-Ws5c11,	-Ws5c12,	-Ws5c13,	-Ws5c14,	-Ws5c15,	-Ws5c16,	-Ws5c17,	-Ws5c18,	-Ws5c19,	-Ws5c20,	-Ws5c21,	-Ws5c22,	-Ws5c23,	-Ws5c24,	-Ws5c25,	-Ws5c26,	-Ws5c27,	-Ws5c28,	-Ws5c29,	-Ws5c30,	-Ws5c31,	-Ws5c32,	-FD1d,	-FD2a,	-FD2b,	-FD2c,	-FD2d,	-FD3a,	-FD3b,	-FD3c,	-FD3d,	-FD4a,	-FD4b,	-FD4c,	-FD4d,	-FD5a,	-FD5b,	-FD5c,	-FD5d,	-FD6a,	-FD6b,	-FD6c,	-FD6d,	-FD7a,	-FD7b,	-FD7c,	-FD7d,	-FD8a,	-FD8b,	-FD8c,	-FD8d,	-FD9a,	-FD9b,	-FD9c,	-FD9d,	-FD10a,	-FD10b,	-FD10c,	-FD10d,	-FD11a,	-FD11b,	-FD11c,	-FD11d,	-FD12a,	-FD12b,	-FD12c,	-FD12d, -ForkLength_cm)
+
+# View the numeric data
+head(numeric_data)
+
+# Run PCA on the numeric data
+fish_data_pca <- prcomp(numeric_data, scale = TRUE)
+
+# View the summary of the PCA results
+# This shows the variance explained by each principal component
+summary(fish_data_pca)
+
+# View the rotation (loadings) of the variables
+# This tells you how each original variable contributes to the principal components
+fish_data_pca$rotation
+
+# Create a biplot showing both individuals and variables
+# The 'repel = TRUE' option helps avoid text overlapping
+fviz_pca_biplot(fish_data_pca,
+                geom.ind = "point",        # Show individuals as points
+                col.ind = species_labels,  # Color individuals by species
+                palette = "jco",
+                addEllipses = TRUE,
+                legend.title = "Species",
+                col.var = "black",         # Variables are shown as black arrows
+                repel = TRUE               # Avoids text overlap
+)
+
+```
+
+QDA model
+
+```{r}
+library(MASS)
+library(caret)
+
+data(fish_data)
+parts <- createDataPartition(fish_data$PacFIN_Species_Code, p = 0.8, list = FALSE)
+    train_data <- fish_data[parts, ]
+    test_data <- fish_data[-parts, ]
+    
+qda_model <- qda(PacFIN_Species_Code ~ otolitharea_fl_std + otolithlength_fl_std + otolithperimeter_fl_std + otolithwidth_fl_std + otoliththickness_fl_std + sulcus_fl_std, data = train_data)
+
+qda_predictions <- predict(qda_model, newdata = test_data)
+
+confusionMatrix(qda_predictions$class, test_data$PacFIN_Species_Code)
+```
+
+```{r}
+library('corrr')
+library("ggcorrplot")
+library("FactoMineR")
+library("factoextra")
+library("tidyverse")
+library("ggplot2")
+
+str(fish_data)
+numericaldat<-fish_data[,152:157]
+head(numericaldat)
+
+norm_data<-numericaldat
+head(norm_data)
+data.pca <- princomp(norm_data)
+summary(data.pca)
+
+data.pca$loadings[, 1:2]
+fviz_eig(data.pca, addlabels = TRUE)
+fviz_pca_var(data.pca, col.var = "cos2",
+            gradient.cols = c("purple", "orange", "green", "brown", "red", "blue"),
+            repel = TRUE)
+
+#Look between species
+# Store the Species column separately for plotting later
+species_labels <- fish_data$PacFIN_Species_Code
+
+# Create a new data frame with only the numeric columns
+numeric_data <- fish_data %>% select(-PacFIN_Species_Code, -key, -FishInfoID, -Year, -Field_ID, -Vessel_Abbreviated, -Vessel, -Genetic.Notes, -Set.ID,-Site,-Collection_Date,-LATDD,-LONDD,-Depth_m,-Wt_kg, -Sex,-Otolith_Num,-FCNum,-FieldNotes,-Species,-Collection,-On.Target.Reads,-X..GT,-Age_years, -Wgt_g,-L_or_R,-FT_NIR_ID,-Scanned,-picname,-Image_taken,-folder,-cal,-Image...Scanning.Notes, -Caliper_otolith_thickness_mm,-ImageJ_rostrum_mm, -mean.radii,	-Ws0c1,	-Ws1c1,	-Ws1c2,	-Ws2c1,	-Ws2c2,	-Ws2c3,	-Ws2c4,	-Ws3c1,	-Ws3c2,	-Ws3c3,	-Ws3c4,	-Ws3c5,	-Ws3c6,	-Ws3c7,	-Ws3c8,	-Ws4c1,	-Ws4c2,	-Ws4c3,	-Ws4c4,	-Ws4c5,	-Ws4c6,	-Ws4c7,	-Ws4c8,	-Ws4c9,	-Ws4c10,	-Ws4c11,	-Ws4c12,	-Ws4c13,	-Ws4c14,	-Ws4c15,	-Ws4c16,	-Ws5c1,	-Ws5c2,	-Ws5c3,	-Ws5c4,	-Ws5c5,	-Ws5c6,	-Ws5c7,	-Ws5c8,	-Ws5c9,	-Ws5c10,	-Ws5c11,	-Ws5c12,	-Ws5c13,	-Ws5c14,	-Ws5c15,	-Ws5c16,	-Ws5c17,	-Ws5c18,	-Ws5c19,	-Ws5c20,	-Ws5c21,	-Ws5c22,	-Ws5c23,	-Ws5c24,	-Ws5c25,	-Ws5c26,	-Ws5c27,	-Ws5c28,	-Ws5c29,	-Ws5c30,	-Ws5c31,	-Ws5c32,	-FD1d,	-FD2a,	-FD2b,	-FD2c,	-FD2d,	-FD3a,	-FD3b,	-FD3c,	-FD3d,	-FD4a,	-FD4b,	-FD4c,	-FD4d,	-FD5a,	-FD5b,	-FD5c,	-FD5d,	-FD6a,	-FD6b,	-FD6c,	-FD6d,	-FD7a,	-FD7b,	-FD7c,	-FD7d,	-FD8a,	-FD8b,	-FD8c,	-FD8d,	-FD9a,	-FD9b,	-FD9c,	-FD9d,	-FD10a,	-FD10b,	-FD10c,	-FD10d,	-FD11a,	-FD11b,	-FD11c,	-FD11d,	-FD12a,	-FD12b,	-FD12c,	-FD12d, -ForkLength_cm, -ImageJ_sulcus_mm, -otolith.area, -otolith.length, -otolith.width, -otolith.perimeter, -Caliper_conversion_mm)
+
+# View the numeric data
+head(numeric_data)
+
+# Run PCA on the numeric data
+fish_data_pca <- prcomp(numeric_data)
+
+# View the summary of the PCA results
+# This shows the variance explained by each principal component
+summary(fish_data_pca)
+
+# View the rotation (loadings) of the variables
+# This tells you how each original variable contributes to the principal components
+fish_data_pca$rotation
+
+# Create a biplot showing both individuals and variables
+# The 'repel = TRUE' option helps avoid text overlapping
+fviz_pca_biplot(fish_data_pca,
+                geom.ind = "point",        # Show individuals as points
+                col.ind = species_labels,  # Color individuals by species
+                palette = "jco",
+                addEllipses = TRUE,
+                legend.title = "Species",
+                col.var = "black",         # Variables are shown as black arrows
+                repel = TRUE               # Avoids text overlap
+)
+```
+
+```{r}
+library('corrr')
+library("ggcorrplot")
+library("FactoMineR")
+library("factoextra")
+library("tidyverse")
+library("ggplot2")
+
+str(fish_data)
+numericaldat<-fish_data[,151:156]
+head(numericaldat)
+
+data.pca <- princomp(numericaldat)
+summary(data.pca)
+
+data.pca$loadings[, 1:2]
+fviz_eig(data.pca, addlabels = TRUE)
+fviz_pca_var(data.pca, col.var = "cos2",
+            gradient.cols = c("purple", "orange", "green", "brown", "blue"),
+            repel = TRUE)
+
+#Look between species
+# Store the Species column separately for plotting later
+species_labels <- fish_data$PacFIN_Species_Code
+
+# View the numeric data
+head(numericaldat)
+
+# Run PCA on the numeric data
+fish_data_pca <- prcomp(numericaldat, scale = TRUE)
+
+# View the summary of the PCA results
+# This shows the variance explained by each principal component
+summary(fish_data_pca)
+
+# View the rotation (loadings) of the variables
+# This tells you how each original variable contributes to the principal components
+fish_data_pca$rotation
+
+# Create a biplot showing both individuals and variables
+# The 'repel = TRUE' option helps avoid text overlapping
+fviz_pca_biplot(fish_data_pca,
+                geom.ind = "point",        # Show individuals as points
+                col.ind = species_labels,  # Color individuals by species
+                palette = "jco",
+                addEllipses = TRUE,
+                legend.title = "Species",
+                col.var = "black",         # Variables are shown as black arrows
+                repel = TRUE               # Avoids text overlap
+)
+```
+
+```{r}
+#plot wavelet data
+library(ggplot2)
+library(tidyr)
+library(dplyr) # Often used with tidyr for data manipulation
+
+# Select columns 
+small_dataset <- fish_data[, c("picname", "PacFIN_Species_Code", "Wgt_g", "otolithperimeter_fl_std", "otolitharea_fl_std", "otolithwidth_fl_std", "otolithlength_fl_std", "otoliththickness_fl_std", "sulcus_fl_std", "Ws0c1",	"Ws1c1",	"Ws1c2",	"Ws2c1",	"Ws2c2",	"Ws2c3",	"Ws2c4",	"Ws3c1",	"Ws3c2",	"Ws3c3",	"Ws3c4",	"Ws3c5",	"Ws3c6",	"Ws3c7",	"Ws3c8",	"Ws4c1",	"Ws4c2",	"Ws4c3",	"Ws4c4",	"Ws4c5",	"Ws4c6",	"Ws4c7",	"Ws4c8",	"Ws4c9",	"Ws4c10",	"Ws4c11",	"Ws4c12",	"Ws4c13",	"Ws4c14",	"Ws4c15",	"Ws4c16",	"Ws5c1",	"Ws5c2",	"Ws5c3",	"Ws5c4",	"Ws5c5",	"Ws5c6",	"Ws5c7",	"Ws5c8",	"Ws5c9",	"Ws5c10",	"Ws5c11",	"Ws5c12",	"Ws5c13",	"Ws5c14",	"Ws5c15",	"Ws5c16",	"Ws5c17",	"Ws5c18",	"Ws5c19",	"Ws5c20",	"Ws5c21",	"Ws5c22",	"Ws5c23",	"Ws5c24",	"Ws5c25",	"Ws5c26",	"Ws5c27",	"Ws5c28",	"Ws5c29",	"Ws5c30",	"Ws5c31",	"Ws5c32")]
+view(small_dataset)
+write.csv(small_dataset, "small_dataset.csv", row.names = FALSE)
+
+
+```
+
+```{r}
+# Plot standardized morphometric data looking at other factors like sex, size at maturity, age at maturity see if there are any trends
+#Length at 50% maturity 38.4 cm Dick et al.,2021
+#Age at maturity 8 yrs old
+
+library("ggplot2")
+setwd("C:/Users/hayley.mapes.NMFS/Documents/Otolith-Morphometric-Project/shapeR_VRML_SUNS/ShapeAnalysis")
+fish_data<-read.csv("fish_data_size.csv")
+ggplot(fish_data, aes(x = Sex, y = otolitharea_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.2, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " sex",
+        y = "Otolith area standardized by FL"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+t.test(Wgt_g ~ PacFIN_Species_Code, data = fish_data)
+```
+
+```{r}
+#Boxplot analysis
+library(rstatix)
+library(ggplot2)
+View(fish_data)
+
+fish_data$otolithperimeter_fl_std<-fish_data$otolith.perimeter/fish_data$ForkLength_cm
+fish_data$otolitharea_fl_std<-fish_data$otolith.area/fish_data$ForkLength_cm
+fish_data$otolithlength_fl_std<-fish_data$otolith.length/fish_data$ForkLength_cm
+fish_data$otolithwidth_fl_std<-fish_data$otolith.width/fish_data$ForkLength_cm
+fish_data$otoliththickness_fl_std<-fish_data$Caliper_conversion_mm/fish_data$ForkLength_cm
+fish_data$sulcus_fl_std<-fish_data$ImageJ_sulcus_mm/fish_data$ForkLength_cm
+View(fish_data)
+
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolithperimeter_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.06, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith perimeter standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+t.test((otolithperimeter_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolitharea_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.06, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith area standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+t.test((otolitharea_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolithlength_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.06, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith length standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+
+t.test((otolithlength_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otolithwidth_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.06, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith width standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold"))
+
+
+t.test((otolithwidth_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = otoliththickness_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.06, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith thickness standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold"))
+
+t.test((otoliththickness_fl_std) ~ PacFIN_Species_Code, data = fish_data)
+
+ggplot(fish_data, aes(x = PacFIN_Species_Code, y = sulcus_fl_std)) +
+      geom_boxplot(outlier.shape = NA, fill = "lightblue", color = "darkblue") +
+      geom_jitter(width = 0.06, alpha = 0.3, size = 0.7) +
+      theme_minimal() +
+      labs(
+        title = NULL,
+        x = " Species",
+        y = "Otolith sulcus groove standardized by fork lenth"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold"))
+
+t.test((sulcus_fl_std) ~ PacFIN_Species_Code, data = fish_data)
 ```
