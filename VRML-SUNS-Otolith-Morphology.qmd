@@ -17,7 +17,7 @@ library(shapeR)
 #Set project path to the folder 'ShapeAnalysis'
 shape_obj <- shapeR(
   project.path = here("ShapeAnalysis"), 
-  info.file = "fish_data_cleaned_agemat.csv"
+  info.file = "FISH.csv"
 )
 
 ```
@@ -59,7 +59,7 @@ shape_obj = generateShapeCoefficients(shape_obj)
 shape_obj = enrich.master.list(shape_obj)
 
 # Save shape object
-save(shape_obj, file = "VRML-SUNS-agemat.Rdata")
+save(shape_obj, file = "VRML-SUNS.Rdata")
 
 ```
 
@@ -145,7 +145,7 @@ tapply(getMeasurements(shape_obj)$otolith.width,
 -   **plotWavelet** argument can be used to inspect how the variation in the Wavelet coefficients is dependent on the position along the outline. The proportion of variation among groups, the interclass correlation (ICC), gives further information about the partition of the variation along the outline
 
     ```{r}
-    shape = stdCoefs(shape_obj, classes = "PacFIN_Species_Code", "ForkLength_cm", 
+    shape = stdCoefs(shape_obj, classes = "PacFIN_Species_Code", "ForkLength_mm", 
                      bonferroni = TRUE)
 
     est.list = estimate.outline.reconstruction(shape_obj)
@@ -930,7 +930,7 @@ library("tidyverse")
 library("ggplot2")
 
 str(fish_data)
-numericaldat<-fish_data[,267:272]
+numericaldat<-fish_data[,152:157]
 head(numericaldat)
 
 data.pca <- princomp(numericaldat)
@@ -939,7 +939,7 @@ summary(data.pca)
 data.pca$loadings[, 1:2]
 fviz_eig(data.pca, addlabels = TRUE)
 fviz_pca_var(data.pca, col.var = "cos2",
-            gradient.cols = c("purple", "orange", "green", "brown"),
+            gradient.cols = c("purple", "orange", "green", "brown", "red", "blue"),
             repel = TRUE)
 
 #Look between species
@@ -1061,7 +1061,7 @@ library("tidyverse")
 library("ggplot2")
 
 str(fish_data)
-numericaldat<-fish_data[,151:156]
+numericaldat<-fish_data[,152:157]
 head(numericaldat)
 
 data.pca <- princomp(numericaldat)
